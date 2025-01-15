@@ -20,6 +20,7 @@ import zlib
 from typing import Any, BinaryIO, Generator, List, Optional, Tuple, Union, cast
 
 from ..message import Message
+from ..ethernetframeext import EthernetFrameExt
 from ..typechecking import StringPathLike
 from ..util import channel2int, dlc2len, len2dlc
 from .generic import BinaryIOMessageReader, FileIOMessageWriter
@@ -76,14 +77,36 @@ CAN_ERROR_EXT_STRUCT = struct.Struct("<HHLBBBxLLH2x8s")
 # group name length, marker name length, description length
 GLOBAL_MARKER_STRUCT = struct.Struct("<LLL3xBLLL12x")
 
+# structLength, flags, channel, hardwareChannel, frameduration, framechecksum, dir, frameLength, framehandle, reservedEthernetFrameEx, frameData
+ETHERNET_FRAME_EX_STRUCT = struct.Struct("<HHHHQLHHLL")
+
 
 CAN_MESSAGE = 1
 LOG_CONTAINER = 10
+ETHERNET_FRAME = 71
 CAN_ERROR_EXT = 73
 CAN_MESSAGE2 = 86
 GLOBAL_MARKER = 96
 CAN_FD_MESSAGE = 100
 CAN_FD_MESSAGE_64 = 101
+ETHERNET_FRAME_EX = 120 # < Ethernet packet extended object 
+ETHERNET_FRAME_FORWARDED = 121 # < Ethernet packet forwarded object 
+ETHERNET_ERROR_EX = 122 # < Ethernet error extended object 
+ETHERNET_ERROR_FORWARDED = 123 # < Ethernet error forwarded object 
+
+'''
+APP_TEXT = 65, /**< text object */
+CAN_STATISTIC = 4, /**< CAN driver statistics object */
+SYS_VARIABLE = 72, /**< system variable object */
+ETHERNET_STATISTIC = 114, /**< Ethernet statistic object */
+Unknown115 = 115,
+DIAG_REQUEST_INTERPRETATION = 119, /**< Event for correct interpretation of diagnostic requests */
+CAN_DRIVER_ERROR = 31, /**< CAN driver error object */
+
+
+ETHERNET_STATUS = 103, /**< Ethernet status object */
+ETHERNET_FRAME_EX = 120, /**< Ethernet packet extended object */
+'''
 
 NO_COMPRESSION = 0
 ZLIB_DEFLATE = 2
@@ -168,6 +191,7 @@ class BLFReader(BinaryIOMessageReader):
         self._pos = 0
 
     def __iter__(self) -> Generator[Message, None, None]:
+        encountered_ids = set()
         while True:
             data = self.file.read(OBJ_HEADER_BASE_STRUCT.size)
             if not data:
@@ -193,21 +217,26 @@ class BLFReader(BinaryIOMessageReader):
                     # Unknown compression method
                     LOG.warning("Unknown compression method (%d)", method)
                     continue
-                yield from self._parse_container(data)
-        self.stop()
+                yield from self._parse_container(data, encountered_ids)
+        
 
-    def _parse_container(self, data):
+        self.stop()
+        print("################################################")
+        print(encountered_ids)
+        print("################################################")
+
+    def _parse_container(self, data, encountered_ids):
         if self._tail:
             data = b"".join((self._tail, data))
         try:
-            yield from self._parse_data(data)
+            yield from self._parse_data(data, encountered_ids)
         except struct.error:
             # There was not enough data in the container to unpack a struct
             pass
         # Save the remaining data that could not be processed
         self._tail = data[self._pos :]
 
-    def _parse_data(self, data):
+    def _parse_data(self, data, encountered_ids):
         """Optimized inner loop by making local copies of global variables
         and class members and hardcoding some values."""
         unpack_obj_header_base = OBJ_HEADER_BASE_STRUCT.unpack_from
@@ -221,6 +250,8 @@ class BLFReader(BinaryIOMessageReader):
         unpack_can_fd_64_msg = CAN_FD_MSG_64_STRUCT.unpack_from
         can_fd_64_msg_size = CAN_FD_MSG_64_STRUCT.size
         unpack_can_error_ext = CAN_ERROR_EXT_STRUCT.unpack_from
+        unpack_ethernet_frame_ex = ETHERNET_FRAME_EX_STRUCT.unpack_from
+        ethernet_ext_msg_size = ETHERNET_FRAME_EX_STRUCT.size
 
         start_timestamp = self.start_timestamp
         max_pos = len(data)
@@ -351,6 +382,38 @@ class BLFReader(BinaryIOMessageReader):
                     data=data[pos : pos + valid_bytes],
                     channel=channel - 1,
                 )
+            elif obj_type == ETHERNET_FRAME:
+                print("ETHERNET_FRAME")
+            elif obj_type == ETHERNET_FRAME_EX:
+                members = unpack_ethernet_frame_ex(data, pos)
+                (
+                    structLength,
+                    flags,
+                    channel,
+                    hardwareChannel,
+                    frameDuration,
+                    frameChecksum,
+                    direction,
+                    frameLength,
+                    frameHandle,
+                    _
+                ) = members
+                
+                pos += ethernet_ext_msg_size
+                yield EthernetFrameExt(
+                    timestamp=timestamp,
+                    struct_length=structLength,
+                    flags=flags,
+                    channel=channel,
+                    hardware_channel=hardwareChannel,
+                    duration=frameDuration,
+                    checksum=frameChecksum,
+                    handle=frameHandle,
+                    data=data[pos : pos + frameLength],
+                )
+
+            else:
+                encountered_ids.add(obj_type)
 
             pos = next_pos
 
