@@ -19,6 +19,9 @@ import time
 import zlib
 from typing import Any, BinaryIO, Generator, List, Optional, Tuple, Union, cast
 
+from can.ethernetframe import EthernetFrame
+from can.unsupportedmessage import UnsupportedMessage
+
 from ..message import Message
 from ..ethernetframeext import EthernetFrameExt
 from ..typechecking import StringPathLike
@@ -77,6 +80,9 @@ CAN_ERROR_EXT_STRUCT = struct.Struct("<HHLBBBxLLH2x8s")
 # group name length, marker name length, description length
 GLOBAL_MARKER_STRUCT = struct.Struct("<LLL3xBLLL12x")
 
+# sourceAddress, channel, destinationAddress, dir, type, tpid, tci, payloadLength, reservedEthernetFrame, payload
+ETHERNET_FRAME_STRUCT = struct.Struct("<6BH6BHHHHHQ")
+
 # structLength, flags, channel, hardwareChannel, frameduration, framechecksum, dir, frameLength, framehandle, reservedEthernetFrameEx, frameData
 ETHERNET_FRAME_EX_STRUCT = struct.Struct("<HHHHQLHHLL")
 
@@ -123,7 +129,7 @@ TIME_ONE_NANS = 0x00000002
 
 
 def timestamp_to_systemtime(timestamp: float) -> TSystemTime:
-    if timestamp is None or timestamp < 631152000:
+    if timestamp is None:
         # Probably not a Unix timestamp
         return 0, 0, 0, 0, 0, 0, 0, 0
     t = datetime.datetime.fromtimestamp(round(timestamp, 3))
@@ -250,6 +256,8 @@ class BLFReader(BinaryIOMessageReader):
         unpack_can_fd_64_msg = CAN_FD_MSG_64_STRUCT.unpack_from
         can_fd_64_msg_size = CAN_FD_MSG_64_STRUCT.size
         unpack_can_error_ext = CAN_ERROR_EXT_STRUCT.unpack_from
+        unpack_ethernet_frame = ETHERNET_FRAME_STRUCT.unpack_from
+        ethernet_frame_msg_size = ETHERNET_FRAME_STRUCT.size
         unpack_ethernet_frame_ex = ETHERNET_FRAME_EX_STRUCT.unpack_from
         ethernet_ext_msg_size = ETHERNET_FRAME_EX_STRUCT.size
 
@@ -383,8 +391,36 @@ class BLFReader(BinaryIOMessageReader):
                     channel=channel - 1,
                 )
             elif obj_type == ETHERNET_FRAME:
-                print("ETHERNET_FRAME")
+                print("ETHF")
+                members = unpack_ethernet_frame(data, pos)
+                (
+                    sourceAddress,
+                    channel,
+                    destinationAddress,
+                    direction,
+                    frameType,
+                    tpid,
+                    tci,
+                    payloadLength,
+                    _
+                ) = members
+
+                pos += ethernet_frame_msg_size
+                yield EthernetFrame(
+                    timestamp=timestamp,
+                    source_address=sourceAddress,
+                    channel=channel,
+                    destination_address=destinationAddress,
+                    direction=direction,
+                    type=frameType,
+                    tpid=tpid,
+                    tci=tci,
+                    payloadLength=payloadLength,
+                    data=data[pos : pos + payloadLength],
+                )
+
             elif obj_type == ETHERNET_FRAME_EX:
+                print("ETHFEXT")
                 members = unpack_ethernet_frame_ex(data, pos)
                 (
                     structLength,
@@ -414,6 +450,12 @@ class BLFReader(BinaryIOMessageReader):
 
             else:
                 encountered_ids.add(obj_type)
+                print("Unsupported message type: ", obj_type)
+                yield UnsupportedMessage(
+                    objectType=obj_type,
+                    timestamp=timestamp,
+                    data=data
+                )
 
             pos = next_pos
 
@@ -506,6 +548,13 @@ class BLFWriter(FileIOMessageWriter):
         self.file.write(b"\x00" * (FILE_HEADER_SIZE - FILE_HEADER_STRUCT.size))
 
     def on_message_received(self, msg):
+
+        if isinstance(msg, UnsupportedMessage):
+            data = msg.data
+            self._add_object(msg.objectType, data, msg.timestamp)
+            return
+        
+
         channel = channel2int(msg.channel)
         if channel is None:
             channel = self.channel
@@ -513,6 +562,40 @@ class BLFWriter(FileIOMessageWriter):
             # Many interfaces start channel numbering at 0 which is invalid
             channel += 1
 
+
+        if isinstance(msg, EthernetFrameExt):
+            # TODO: double check here
+            hardware_channel = channel2int(msg.hardware_channel)
+            data = ETHERNET_FRAME_EX_STRUCT.pack(
+            msg.struct_length,
+            msg.flags,
+            channel,
+            hardware_channel if hardware_channel is not None else 0,
+            msg.duration if msg.duration is not None else 0,
+            msg.checksum if msg.checksum is not None else 0,
+            msg.direction if msg.direction is not None else 0,
+            len(msg.data),
+            msg.handle,
+            0,  # reservedEthernetFrameEx
+            )
+            self._add_object(ETHERNET_FRAME_EX, data + msg.data, msg.timestamp)
+            return
+        
+        if isinstance(msg, EthernetFrame):
+            data = ETHERNET_FRAME_STRUCT.pack(
+                msg.source_address,
+                channel,
+                msg.destination_address,
+                msg.direction,
+                msg.type,
+                msg.tpid,
+                msg.tci,
+                len(msg.payload),
+                0,  # reservedEthernetFrame
+            )
+            self._add_object(ETHERNET_FRAME, data + msg.payload, msg.timestamp)
+            return
+        
         arb_id = msg.arbitration_id
         if msg.is_extended_id:
             arb_id |= CAN_MSG_EXT

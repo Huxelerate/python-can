@@ -54,7 +54,7 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
                 raise TypeError(err) from error
 
     def __str__(self) -> str:
-        field_strings = [f"(ETHERNET) Timestamp: {self.timestamp:>15.6f}"]
+        field_strings = [f"ETHFEXT - Timestamp: {self.timestamp:>15.6f}"]
         # if self.is_extended_id:
         #     arbitration_id_string = f"{self.arbitration_id:08x}"
         # else:
