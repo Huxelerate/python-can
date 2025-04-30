@@ -24,7 +24,8 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
         handle: int = 0,
         # Frame data
         # TODO: check here typechecking.CanData
-        data: Optional[typechecking.CanData] = None
+        data: Optional[typechecking.CanData] = None,
+        rawdata: Optional[typechecking.CanData] = None
 
     ):
         """
@@ -51,6 +52,17 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
                 self.data = bytearray(data)
             except TypeError as error:
                 err = f"Couldn't create message from {data} ({type(data)})"
+                raise TypeError(err) from error
+            
+        if rawdata is None:
+            self.rawdata = bytearray()
+        elif isinstance(rawdata, bytearray):
+            self.rawdata = rawdata
+        else:
+            try:
+                self.rawdata = bytearray(rawdata)
+            except TypeError as error:
+                err = f"Couldn't create message from {rawdata} ({type(rawdata)})"
                 raise TypeError(err) from error
 
     def __str__(self) -> str:

@@ -20,7 +20,7 @@ import zlib
 from typing import Any, BinaryIO, Generator, List, Optional, Tuple, Union, cast
 
 from can.ethernetframe import EthernetFrame
-from can.unsupportedmessage import UnsupportedMessage
+from can.unknownmessage import UnknownMessage
 
 from ..message import Message
 from ..ethernetframeext import EthernetFrameExt
@@ -81,7 +81,8 @@ CAN_ERROR_EXT_STRUCT = struct.Struct("<HHLBBBxLLH2x8s")
 GLOBAL_MARKER_STRUCT = struct.Struct("<LLL3xBLLL12x")
 
 # sourceAddress, channel, destinationAddress, dir, type, tpid, tci, payloadLength, reservedEthernetFrame, payload
-ETHERNET_FRAME_STRUCT = struct.Struct("<6BH6BHHHHHQ")
+ETHERNET_FRAME_STRUCT = struct.Struct("<6sH6sHHHHHQ")
+# ETHERNET_FRAME_STRUCT = struct.Struct("<6BH6BHHHHHQ")
 
 # structLength, flags, channel, hardwareChannel, frameduration, framechecksum, dir, frameLength, framehandle, reservedEthernetFrameEx, frameData
 ETHERNET_FRAME_EX_STRUCT = struct.Struct("<HHHHQLHHLL")
@@ -132,7 +133,7 @@ def timestamp_to_systemtime(timestamp: float) -> TSystemTime:
     if timestamp is None:
         # Probably not a Unix timestamp
         return 0, 0, 0, 0, 0, 0, 0, 0
-    t = datetime.datetime.fromtimestamp(round(timestamp, 3))
+    t = datetime.datetime.fromtimestamp(round(timestamp, 6))
     return (
         t.year,
         t.month,
@@ -390,72 +391,82 @@ class BLFReader(BinaryIOMessageReader):
                     data=data[pos : pos + valid_bytes],
                     channel=channel - 1,
                 )
-            elif obj_type == ETHERNET_FRAME:
-                print("ETHF")
-                members = unpack_ethernet_frame(data, pos)
-                (
-                    sourceAddress,
-                    channel,
-                    destinationAddress,
-                    direction,
-                    frameType,
-                    tpid,
-                    tci,
-                    payloadLength,
-                    _
-                ) = members
+            # elif obj_type == ETHERNET_FRAME:
+            #     print("ETHF")
+            #     members = unpack_ethernet_frame(data, pos)
+            #     (
+            #         sourceAddress,
+            #         channel,
+            #         destinationAddress,
+            #         direction,
+            #         frameType,
+            #         tpid,
+            #         tci,
+            #         payloadLength,
+            #         _
+            #     ) = members
 
-                pos += ethernet_frame_msg_size
-                yield EthernetFrame(
-                    timestamp=timestamp,
-                    source_address=sourceAddress,
-                    channel=channel,
-                    destination_address=destinationAddress,
-                    direction=direction,
-                    type=frameType,
-                    tpid=tpid,
-                    tci=tci,
-                    payloadLength=payloadLength,
-                    data=data[pos : pos + payloadLength],
-                )
+            #     # For standard ETH frames, I am storing the raw frame as otherwise Scrappy is not able
+            #     # to infer the type of the frame.
+            #     # For extended ETH frames, I am not storing the raw frame as it is not needed: the information is inferred from framedata
 
-            elif obj_type == ETHERNET_FRAME_EX:
-                print("ETHFEXT")
-                members = unpack_ethernet_frame_ex(data, pos)
-                (
-                    structLength,
-                    flags,
-                    channel,
-                    hardwareChannel,
-                    frameDuration,
-                    frameChecksum,
-                    direction,
-                    frameLength,
-                    frameHandle,
-                    _
-                ) = members
+            #     original_pos = pos
+            #     pos += ethernet_frame_msg_size
+            #     yield EthernetFrame(
+            #         timestamp=timestamp,
+            #         source_address=sourceAddress,
+            #         channel=channel,
+            #         destination_address=destinationAddress,
+            #         direction=direction,
+            #         type=frameType,
+            #         tpid=tpid,
+            #         tci=tci,
+            #         payloadLength=payloadLength,
+            #         data=data[pos : pos + payloadLength],
+            #         rawdata=data[original_pos : original_pos + ethernet_frame_msg_size + payloadLength],
+            #     )
+
+            # elif obj_type == ETHERNET_FRAME_EX:
+            #     print("ETHFEXT")
+            #     members = unpack_ethernet_frame_ex(data, pos)
+            #     (
+            #         structLength,
+            #         flags,
+            #         channel,
+            #         hardwareChannel,
+            #         frameDuration,
+            #         frameChecksum,
+            #         direction,
+            #         frameLength,
+            #         frameHandle,
+            #         _
+            #     ) = members
                 
-                pos += ethernet_ext_msg_size
-                yield EthernetFrameExt(
-                    timestamp=timestamp,
-                    struct_length=structLength,
-                    flags=flags,
-                    channel=channel,
-                    hardware_channel=hardwareChannel,
-                    duration=frameDuration,
-                    checksum=frameChecksum,
-                    handle=frameHandle,
-                    data=data[pos : pos + frameLength],
-                )
+            #     original_pos = pos
+            #     pos += ethernet_ext_msg_size
+            #     yield EthernetFrameExt(
+            #         timestamp=timestamp,
+            #         struct_length=structLength,
+            #         flags=flags,
+            #         channel=channel,
+            #         hardware_channel=hardwareChannel,
+            #         duration=frameDuration,
+            #         checksum=frameChecksum,
+            #         handle=frameHandle,
+            #         data=data[pos : pos + frameLength],
+            #         rawdata=data[original_pos : original_pos + ethernet_ext_msg_size + frameLength],
+            #     )
 
             else:
                 encountered_ids.add(obj_type)
                 print("Unsupported message type: ", obj_type)
-                yield UnsupportedMessage(
+                # print(f"timestamp: {timestamp}")
+                yield UnknownMessage(
                     objectType=obj_type,
                     timestamp=timestamp,
-                    data=data
+                    data=data[pos : next_pos]
                 )
+                # print(f"[python-can][reader] data {data[pos : next_pos]} ({type(data)})")
 
             pos = next_pos
 
@@ -549,8 +560,10 @@ class BLFWriter(FileIOMessageWriter):
 
     def on_message_received(self, msg):
 
-        if isinstance(msg, UnsupportedMessage):
+        if isinstance(msg, UnknownMessage):
             data = msg.data
+            # print(f"[python-can][writer] data {data} ({type(data)})")
+            # print(f"timestamp: {msg.timestamp}")
             self._add_object(msg.objectType, data, msg.timestamp)
             return
         
@@ -563,38 +576,38 @@ class BLFWriter(FileIOMessageWriter):
             channel += 1
 
 
-        if isinstance(msg, EthernetFrameExt):
-            # TODO: double check here
-            hardware_channel = channel2int(msg.hardware_channel)
-            data = ETHERNET_FRAME_EX_STRUCT.pack(
-            msg.struct_length,
-            msg.flags,
-            channel,
-            hardware_channel if hardware_channel is not None else 0,
-            msg.duration if msg.duration is not None else 0,
-            msg.checksum if msg.checksum is not None else 0,
-            msg.direction if msg.direction is not None else 0,
-            len(msg.data),
-            msg.handle,
-            0,  # reservedEthernetFrameEx
-            )
-            self._add_object(ETHERNET_FRAME_EX, data + msg.data, msg.timestamp)
-            return
+        # if isinstance(msg, EthernetFrameExt):
+        #     # TODO: double check here
+        #     hardware_channel = channel2int(msg.hardware_channel)
+        #     data = ETHERNET_FRAME_EX_STRUCT.pack(
+        #     msg.struct_length,
+        #     msg.flags,
+        #     channel,
+        #     hardware_channel if hardware_channel is not None else 0,
+        #     msg.duration if msg.duration is not None else 0,
+        #     msg.checksum if msg.checksum is not None else 0,
+        #     msg.direction if msg.direction is not None else 0,
+        #     len(msg.data),
+        #     msg.handle,
+        #     0,  # reservedEthernetFrameEx
+        #     )
+        #     self._add_object(ETHERNET_FRAME_EX, data + msg.data, msg.timestamp)
+        #     return
         
-        if isinstance(msg, EthernetFrame):
-            data = ETHERNET_FRAME_STRUCT.pack(
-                msg.source_address,
-                channel,
-                msg.destination_address,
-                msg.direction,
-                msg.type,
-                msg.tpid,
-                msg.tci,
-                len(msg.payload),
-                0,  # reservedEthernetFrame
-            )
-            self._add_object(ETHERNET_FRAME, data + msg.payload, msg.timestamp)
-            return
+        # if isinstance(msg, EthernetFrame):
+        #     data = ETHERNET_FRAME_STRUCT.pack(
+        #         msg.source_address,
+        #         channel,
+        #         msg.destination_address,
+        #         msg.direction,
+        #         msg.type,
+        #         msg.tpid,
+        #         msg.tci,
+        #         len(msg.payload),
+        #         0,  # reservedEthernetFrame
+        #     )
+        #     self._add_object(ETHERNET_FRAME, data + msg.payload, msg.timestamp)
+        #     return
         
         arb_id = msg.arbitration_id
         if msg.is_extended_id:

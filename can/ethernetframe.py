@@ -35,7 +35,9 @@ class EthernetFrame:
 
         payloadLength: int = 0,
         # TODO: check here typechecking.CanData
-        data: Optional[typechecking.CanData] = None
+        data: Optional[typechecking.CanData] = None,
+
+        rawdata: Optional[typechecking.CanData] = None
 
     ): 
         self.timestamp = timestamp
@@ -49,14 +51,25 @@ class EthernetFrame:
         self.payloadLength = payloadLength
 
         if data is None:
-            self.payload = bytearray()
+            self.data = bytearray()
         elif isinstance(data, bytearray):
-            self.payload = data
+            self.data = data
         else:
             try:
-                self.payload = bytearray(data)
+                self.data = bytearray(data)
             except TypeError as error:
                 err = f"Couldn't create message from {data} ({type(data)})"
+                raise TypeError(err) from error
+        
+        if rawdata is None:
+            self.rawdata = bytearray()
+        elif isinstance(rawdata, bytearray):
+            self.rawdata = rawdata
+        else:
+            try:
+                self.rawdata = bytearray(rawdata)
+            except TypeError as error:
+                err = f"Couldn't create message from {rawdata} ({type(rawdata)})"
                 raise TypeError(err) from error
             
     def __str__(self) -> str:
@@ -68,6 +81,7 @@ class EthernetFrame:
         field_strings.append(f"TPID: {self.tpid}")
         field_strings.append(f"TCI: {self.tci}")
         field_strings.append(f"Payload Length: {self.payloadLength}")
-        field_strings.append(f"Payload: {self.payload}")
-
+        field_strings.append(f"Data: {self.data}")
+        field_strings.append(f"Raw Data: {self.rawdata}")
+       
         return "\n".join(field_strings)
