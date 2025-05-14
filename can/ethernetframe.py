@@ -27,11 +27,11 @@ class EthernetFrame:
 
         # TPID when VLAN tag valid, zero when no
         # VLAN. See Ethernet standard specification.
-        tpid: Optional[int] = 0,
+        tpid: Optional[int] = None,
 
         # TCI when VLAND tag valid, zero when no
         # VLAN. See Ethernet standard specification.
-        tci: Optional[int] = 0,
+        tci: Optional[int] = None,
 
         payloadLength: int = 0,
         # TODO: check here typechecking.CanData
