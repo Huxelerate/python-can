@@ -440,6 +440,8 @@ class BLFReader(BinaryIOMessageReader):
                     duration=frameDuration,
                     checksum=frameChecksum,
                     handle=frameHandle,
+                    length=frameLength,
+                    direction=direction,
                     data=data[pos : pos + frameLength]
                 )
 

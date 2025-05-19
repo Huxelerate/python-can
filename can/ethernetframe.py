@@ -73,7 +73,7 @@ class EthernetFrame:
                 raise TypeError(err) from error
             
     def __str__(self) -> str:
-        field_strings = [f"ETHF - Timestamp: {self.timestamp:>15.6f}"]
+        field_strings = [f"EthernetFrame - Timestamp: {self.timestamp:>15.6f}"]
         field_strings.append(f"Source Address: {self.source_address}")
         field_strings.append(f"Destination Address: {self.destination_address}")
         field_strings.append(f"Direction: {self.direction}")

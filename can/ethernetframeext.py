@@ -25,7 +25,6 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
         # Frame data
         # TODO: check here typechecking.CanData
         data: Optional[typechecking.CanData] = None,
-        rawdata: Optional[typechecking.CanData] = None
 
     ):
         """
@@ -53,44 +52,16 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
             except TypeError as error:
                 err = f"Couldn't create message from {data} ({type(data)})"
                 raise TypeError(err) from error
-            
-        if rawdata is None:
-            self.rawdata = bytearray()
-        elif isinstance(rawdata, bytearray):
-            self.rawdata = rawdata
-        else:
-            try:
-                self.rawdata = bytearray(rawdata)
-            except TypeError as error:
-                err = f"Couldn't create message from {rawdata} ({type(rawdata)})"
-                raise TypeError(err) from error
 
     def __str__(self) -> str:
         field_strings = [f"ETHFEXT - Timestamp: {self.timestamp:>15.6f}"]
-        # if self.is_extended_id:
-        #     arbitration_id_string = f"{self.arbitration_id:08x}"
-        # else:
-        #     arbitration_id_string = f"{self.arbitration_id:03x}"
-        # field_strings.append(f"ID: {arbitration_id_string:>8}")
-
-        # flag_string = " ".join(
-        #     [
-        #         "X" if self.is_extended_id else "S",
-        #         "Rx" if self.is_rx else "Tx",
-        #         "E" if self.is_error_frame else " ",
-        #         "R" if self.is_remote_frame else " ",
-        #         "F" if self.is_fd else " ",
-        #         "BS" if self.bitrate_switch else "  ",
-        #         "EI" if self.error_state_indicator else "  ",
-        #     ]
-        # )
         flag_string = f"flags: {self.flags}"
-
         field_strings.append(flag_string)
 
-        data_strings = ""
+
+        data_strings = "Data: "
         if self.data is not None:
-            data_strings = self.data[: len(self.data)].hex(" ")
+            data_strings += self.data[: len(self.data)].hex(" ")
         if data_strings:  # if not empty
             field_strings.append(data_strings.ljust(24, " "))
         else:
@@ -109,6 +80,42 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
                 field_strings.append(f"Hardware Channel: {self.hardware_channel}")
             except UnicodeEncodeError:
                 pass
+        if self.direction is not None:
+            try:
+                field_strings.append(f"Direction: {self.direction}")
+            except UnicodeEncodeError:
+                pass
+        if self.length is not None:
+            try:
+                field_strings.append(f"Length: {self.length}")
+            except UnicodeEncodeError:
+                pass
+        if self.handle is not None:
+            try:
+                field_strings.append(f"Handle: {self.handle}")
+            except UnicodeEncodeError:
+                pass
+        if self.checksum is not None:
+            try:
+                field_strings.append(f"Checksum: {self.checksum}")
+            except UnicodeEncodeError:
+                pass
+        if self.duration is not None:
+            try:
+                field_strings.append(f"Duration: {self.duration}")
+            except UnicodeEncodeError:
+                pass
+        if self.is_error_frame is not None:
+            try:
+                field_strings.append(f"Is Error Frame: {self.is_error_frame}")
+            except UnicodeEncodeError:
+                pass
+        if self.struct_length is not None:
+            try:
+                field_strings.append(f"Struct Length: {self.struct_length}")
+            except UnicodeEncodeError:
+                pass
+        
 
 
-        return "    ".join(field_strings).strip()
+        return "\n".join(field_strings).strip()
