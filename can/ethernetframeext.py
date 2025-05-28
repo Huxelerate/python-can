@@ -1,37 +1,28 @@
 from typing import Optional
+
+from .ethernetframe import DirectionFlag
 from . import typechecking
 
 class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for a dataclass
-    """
-   
-    """
 
     def __init__(  # pylint: disable=too-many-locals, too-many-arguments
         self,
         timestamp: float = 0.0,
-        is_error_frame: bool = False,
         struct_length: int = 0,
         flags: int = 0,
         channel: Optional[typechecking.Channel] = None,
-        hardware_channel: Optional[typechecking.Channel] = None,
-        duration: int = None,
-        checksum: int = None,
-        #Direction flag: 0=Rx, 1=Tx, 2=TxRq
-        direction: int = None,
+        hardware_channel: Optional[int] = None,
+        duration: Optional[int] = None,
+        checksum: Optional[int] = None,
+        direction: Optional[DirectionFlag] = None,
         # Number of valid frameData bytes
         length: int = 0,
         # Handle which refer the corresponding EthernetFrameForwarded event
         handle: int = 0,
         # Frame data
-        # TODO: check here typechecking.CanData
-        data: Optional[typechecking.CanData] = None,
-
+        data: Optional[typechecking.CanData] = None
     ):
-        """
-        
-        """
         self.timestamp = timestamp
-        self.is_error_frame = is_error_frame
         self.struct_length = struct_length
         self.flags = flags
         self.channel = channel
@@ -103,11 +94,6 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
         if self.duration is not None:
             try:
                 field_strings.append(f"Duration: {self.duration}")
-            except UnicodeEncodeError:
-                pass
-        if self.is_error_frame is not None:
-            try:
-                field_strings.append(f"Is Error Frame: {self.is_error_frame}")
             except UnicodeEncodeError:
                 pass
         if self.struct_length is not None:

@@ -10,9 +10,6 @@ class DirectionFlag(Enum):
     TxRq = 2
 
 class EthernetFrame:
-    """
-
-    """
 
     def __init__( 
         self,
@@ -20,10 +17,10 @@ class EthernetFrame:
         source_address: Optional[bytearray] = None,
         channel: Optional[typechecking.Channel] = None,
         destination_address: Optional[bytearray] = None,
-        direction: DirectionFlag = None,
+        direction: Optional[DirectionFlag] = None,
         
         # EtherType indicates the protocol for ethernet payload data 
-        type: Optional[bytearray] = None,
+        ether_type: Optional[bytearray] = None,
 
         # TPID when VLAN tag valid, zero when no
         # VLAN. See Ethernet standard specification.
@@ -32,20 +29,15 @@ class EthernetFrame:
         # TCI when VLAND tag valid, zero when no
         # VLAN. See Ethernet standard specification.
         tci: Optional[int] = None,
-
         payloadLength: int = 0,
-        # TODO: check here typechecking.CanData
         data: Optional[typechecking.CanData] = None,
-
-        rawdata: Optional[typechecking.CanData] = None
-
     ): 
         self.timestamp = timestamp
         self.source_address = source_address
         self.channel = channel
         self.destination_address = destination_address
         self.direction = direction
-        self.type = type
+        self.type = ether_type
         self.tpid = tpid
         self.tci = tci
         self.payloadLength = payloadLength
@@ -60,17 +52,6 @@ class EthernetFrame:
             except TypeError as error:
                 err = f"Couldn't create message from {data} ({type(data)})"
                 raise TypeError(err) from error
-        
-        if rawdata is None:
-            self.rawdata = bytearray()
-        elif isinstance(rawdata, bytearray):
-            self.rawdata = rawdata
-        else:
-            try:
-                self.rawdata = bytearray(rawdata)
-            except TypeError as error:
-                err = f"Couldn't create message from {rawdata} ({type(rawdata)})"
-                raise TypeError(err) from error
             
     def __str__(self) -> str:
         field_strings = [f"EthernetFrame - Timestamp: {self.timestamp:>15.6f}"]
@@ -82,6 +63,5 @@ class EthernetFrame:
         field_strings.append(f"TCI: {self.tci}")
         field_strings.append(f"Payload Length: {self.payloadLength}")
         field_strings.append(f"Data: {self.data}")
-        field_strings.append(f"Raw Data: {self.rawdata}")
        
         return "\n".join(field_strings)
