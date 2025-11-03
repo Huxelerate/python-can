@@ -15,6 +15,10 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
         duration: Optional[int] = None,
         checksum: Optional[int] = None,
         direction: Optional[DirectionFlag] = None,
+
+        # EtherType indicates the protocol for ethernet payload data 
+        ether_type: Optional[bytearray] = None,
+
         # Number of valid frameData bytes
         length: int = 0,
         # Handle which refer the corresponding EthernetFrameForwarded event
@@ -30,6 +34,7 @@ class EthernetFrameExt:  # pylint: disable=too-many-instance-attributes; OK for 
         self.duration = duration
         self.checksum = checksum
         self.direction= direction
+        self.type = ether_type
         self.length = length
         self.handle = handle
 
