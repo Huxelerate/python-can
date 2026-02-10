@@ -660,9 +660,9 @@ class BLFWriter(FileIOMessageWriter):
         self._buffer_size += obj_size + padding_size
         self.object_count += 1
         if self._buffer_size >= self.max_container_size:
-            self._flush()
+            self.flush()
 
-    def _flush(self):
+    def flush(self):
         """Compresses and writes data in the buffer to file."""
         if self.file.closed:
             return
@@ -701,7 +701,7 @@ class BLFWriter(FileIOMessageWriter):
 
     def stop(self):
         """Stops logging and closes the file."""
-        self._flush()
+        self.flush()
         if self.file.seekable():
             filesize = self.file.tell()
             # Write header in the beginning of the file
